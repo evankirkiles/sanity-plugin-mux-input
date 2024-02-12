@@ -32,10 +32,9 @@ export default function UploadPlaceholder(props: UploadPlaceholderProps) {
   const handleConfigureApi = useCallback(() => setDialogState('secrets'), [setDialogState])
 
   return (
-    <Box style={{padding: 1, position: 'relative'}} height="stretch">
+    <Box style={{padding: 1, position: 'relative'}}>
       <UploadCard
         sizing="border"
-        height="fill"
         tone={readOnly ? 'transparent' : 'inherit'}
         border
         padding={3}
@@ -58,7 +57,6 @@ export default function UploadPlaceholder(props: UploadPlaceholderProps) {
           direction={['column', 'column', 'row']}
           paddingY={[2, 2, 0]}
           sizing="border"
-          height="fill"
         >
           <Flex align="center" justify="center" gap={2} flex={1}>
             <Flex justify="center">
