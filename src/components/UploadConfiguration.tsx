@@ -1,9 +1,10 @@
 import {UploadIcon} from '@sanity/icons'
-import {Button, Card, Checkbox, Dialog, Flex, Radio, Stack, Text} from '@sanity/ui'
-import {useEffect, useId, useState} from 'react'
+import {Button, Card, Checkbox, Code, Dialog, Flex, Radio, Stack, Text} from '@sanity/ui'
+import {useEffect, useId, useRef, useState} from 'react'
 
 import {PluginConfig, Secrets, UploadConfig} from '../util/types'
 import TextTracksEditor from './TextTracksEditor'
+import {FormField} from 'sanity'
 
 const UPLOAD_DEFAULTS: UploadConfig = {
   encoding_tier: 'smart',
@@ -29,8 +30,9 @@ export default function UploadConfiguration({
   onClose: () => void
 }) {
   const id = useId()
+  const mergedConfig = useRef(Object.assign({}, pluginConfig, schemaConfig)).current
   const [config, setConfig] = useState<UploadConfig>(
-    Object.assign({...UPLOAD_DEFAULTS}, pluginConfig, schemaConfig)
+    Object.assign({...UPLOAD_DEFAULTS}, mergedConfig)
   )
 
   // If user-provided config is disabled, begin the upload immediately with
@@ -50,7 +52,7 @@ export default function UploadConfiguration({
       header="Configure upload"
       onClose={onClose}
     >
-      <Card border paddingX={3} paddingY={4}>
+      <Card paddingX={3} paddingY={4}>
         <Stack space={4}>
           {secrets.enableSignedUrls && (
             <Flex align="center" gap={2}>
@@ -92,7 +94,7 @@ export default function UploadConfiguration({
             </Text>
           </Flex>
 
-          {config.encoding_tier === 'smart' && pluginConfig.mp4_support !== 'none' && (
+          {config.encoding_tier === 'smart' && mergedConfig.mp4_support !== 'none' && (
             <Flex align="center" gap={2}>
               <Checkbox
                 id={`${id}--mp4_support`}
@@ -113,38 +115,47 @@ export default function UploadConfiguration({
             </Flex>
           )}
 
-          {config.encoding_tier === 'smart' && pluginConfig.max_resolution_tier !== '1080p' && (
-            <fieldset style={{all: 'unset'}}>
-              <Stack space={2}>
-                <Text as="legend" size={1} weight="semibold">
-                  Type
-                </Text>
-                {getResolutionOptions(pluginConfig).map(({value, label}) => {
-                  const inputId = `${id}--type-${value}`
-                  return (
-                    <Flex key={value} align="center" gap={2}>
-                      <Radio
-                        checked={config.max_resolution_tier === value}
-                        name="track-type"
-                        onChange={(e) => {
-                          setConfig({
-                            ...config,
-                            max_resolution_tier: e.currentTarget
-                              .value as UploadConfig['max_resolution_tier'],
-                          })
-                        }}
-                        value={value}
-                        id={inputId}
-                      />
-                      <Text as="label" htmlFor={inputId}>
-                        {label}
-                      </Text>
-                    </Flex>
-                  )
-                })}
-              </Stack>
-            </fieldset>
-          )}
+          <FormField
+            title="Resolution Tier"
+            description={
+              <>
+                The maximum{' '}
+                <code>
+                  <a href="https://docs.mux.com/api-reference#video/operation/create-direct-upload">
+                    resolution_tier
+                  </a>
+                </code>{' '}
+                your asset is encoded, stored, and streamed at.
+              </>
+            }
+          >
+            <Flex gap={3}>
+              {getResolutionOptions(config, mergedConfig).map(({value, label, disabled}) => {
+                const inputId = `${id}--type-${value}`
+                return (
+                  <Flex key={value} align="center" gap={2} disabled={disabled}>
+                    <Radio
+                      checked={config.max_resolution_tier === value}
+                      name="track-type"
+                      onChange={(e) => {
+                        setConfig({
+                          ...config,
+                          max_resolution_tier: e.currentTarget
+                            .value as UploadConfig['max_resolution_tier'],
+                        })
+                      }}
+                      value={value}
+                      id={inputId}
+                      disabled={disabled}
+                    />
+                    <Text as="label" htmlFor={inputId}>
+                      {label}
+                    </Text>
+                  </Flex>
+                )
+              })}
+            </Flex>
+          </FormField>
 
           <TextTracksEditor
             tracks={config.text_tracks || []}
@@ -168,11 +179,22 @@ export default function UploadConfiguration({
   )
 }
 
-function getResolutionOptions({max_resolution_tier}: PluginConfig) {
+function getResolutionOptions({encoding_tier}: UploadConfig, {max_resolution_tier}: PluginConfig) {
   return [
-    {value: '1080p', label: '1080p'},
-    max_resolution_tier !== '1080p' && {value: '1440p', label: '1440p (2k)'},
-    max_resolution_tier !== '1080p' &&
-      max_resolution_tier !== '1440p' && {value: '2160p', label: '2160p (4k)'},
-  ].filter(Boolean) as {value: PluginConfig['max_resolution_tier']; label: string}[]
+    {value: '1080p', label: '1080p', disabled: false},
+    {
+      value: '1440p',
+      label: '1440p (2k)',
+      disabled: !(encoding_tier === 'smart' && max_resolution_tier !== '1080p'),
+    },
+    {
+      value: '2160p',
+      label: '2160p (4k)',
+      disabled: !(
+        encoding_tier === 'smart' &&
+        max_resolution_tier !== '1080p' &&
+        max_resolution_tier !== '1440p'
+      ),
+    },
+  ]
 }
