@@ -5,7 +5,7 @@ import {catchError, mergeMap, mergeMapTo, switchMap} from 'rxjs/operators'
 import type {SanityClient} from 'sanity'
 
 import {createUpChunkObservable} from '../clients/upChunkObservable'
-import type {MuxAsset, PluginConfig, UploadConfig} from '../util/types'
+import type {MuxAsset, MuxNewAssetSettings, PluginConfig, UploadConfig} from '../util/types'
 import {getAsset} from './assets'
 import {testSecretsObservable} from './secrets'
 
@@ -19,11 +19,11 @@ export function cancelUpload(client: SanityClient, uuid: string) {
 
 export function uploadUrl({
   url,
-  uploadConfig,
+  settings,
   client,
 }: {
   url: string
-  uploadConfig: UploadConfig
+  settings: MuxNewAssetSettings
   client: SanityClient
 }) {
   return testUrl(url).pipe(
@@ -36,14 +36,11 @@ export function uploadUrl({
               return throwError(new Error('Invalid credentials'))
             }
             const uuid = generateUuid()
-            const muxBody = {
-              input: validUrl,
-              mp4_support: uploadConfig.mp4_support,
-              encoding_tier: uploadConfig.encoding_tier,
-              max_resolution_tier: uploadConfig.max_resolution_tier,
-              playback_policy: [uploadConfig.signed ? 'signed' : 'public'],
-              // @TODO: send tracks to backend
-            }
+            const muxBody = settings
+            if (!muxBody.input) muxBody.input = [{type: 'video'}]
+            muxBody.input[0].url = validUrl
+            console.log(muxBody)
+
             const query = {
               muxBody: JSON.stringify(muxBody),
               filename: validUrl.split('/').slice(-1)[0],
@@ -81,11 +78,11 @@ export function uploadUrl({
 }
 
 export function uploadFile({
-  uploadConfig,
+  settings,
   client,
   file,
 }: {
-  uploadConfig: UploadConfig
+  settings: MuxNewAssetSettings
   client: SanityClient
   file: File
 }) {
@@ -99,13 +96,7 @@ export function uploadFile({
               return throwError(new Error('Invalid credentials'))
             }
             const uuid = generateUuid()
-            const body = {
-              mp4_support: uploadConfig.mp4_support,
-              encoding_tier: uploadConfig.encoding_tier,
-              max_resolution_tier: uploadConfig.max_resolution_tier,
-              playback_policy: [uploadConfig.signed ? 'signed' : 'public'],
-              // @TODO: send tracks to backend
-            }
+            const body = settings
 
             return concat(
               of({type: 'uuid' as const, uuid}),
@@ -115,13 +106,7 @@ export function uploadFile({
                   upload: {
                     cors_origin: string
                     id: string
-                    new_asset_settings: Pick<
-                      Required<PluginConfig>,
-                      'mp4_support' | 'encoding_tier' | 'max_resolution_tier'
-                    > & {
-                      passthrough: string
-                      playback_policies: ['public' | 'signed']
-                    }
+                    new_asset_settings: MuxNewAssetSettings
                     status: 'waiting'
                     timeout: number
                     url: string

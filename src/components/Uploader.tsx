@@ -12,6 +12,7 @@ import {isValidUrl} from '../util/asserters'
 import {extractDroppedFiles} from '../util/extractFiles'
 import type {
   MuxInputProps,
+  MuxNewAssetSettings,
   PluginConfig,
   Secrets,
   UploadConfig,
@@ -25,7 +26,7 @@ import {UploadCard} from './Uploader.styled'
 import UploadPlaceholder from './UploadPlaceholder'
 import {UploadProgress} from './UploadProgress'
 
-interface Props extends Pick<MuxInputProps, 'onChange' | 'readOnly' | 'schemaType'> {
+interface Props extends Pick<MuxInputProps, 'onChange' | 'readOnly'> {
   config: PluginConfig
   client: SanityClient
   secrets: Secrets
@@ -35,14 +36,17 @@ interface Props extends Pick<MuxInputProps, 'onChange' | 'readOnly' | 'schemaTyp
   needsSetup: boolean
 }
 
+export type StagedUpload = {type: 'file'; files: FileList | File[]} | {type: 'url'; url: string}
+type UploadStatus = {
+  progress: number
+  file?: {name: string | undefined; type: string}
+  uuid?: string
+  url?: string
+}
+
 interface State {
-  stagedUpload: {type: 'file'; files: FileList | File[]} | {type: 'url'; url: string} | null
-  uploadStatus: {
-    progress: number
-    file?: {name: string | undefined; type: string}
-    uuid?: string
-    url?: string
-  } | null
+  stagedUpload: StagedUpload | null
+  uploadStatus: UploadStatus | null
   error: Error | null
 }
 
@@ -65,6 +69,14 @@ type UploaderStateAction =
   | {action: 'error'; error: any}
   | {action: 'complete' | 'reset'}
 
+/**
+ * The main interface for inputting a Mux Video. It handles staging an upload
+ * file, setting its configuration, displaying upload progress, and showing
+ * the preview player.
+ *
+ * @param props
+ * @returns
+ */
 export default function Uploader(props: Props) {
   const toast = useToast()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -148,10 +160,10 @@ export default function Uploader(props: Props) {
    * Should only be called from the UploadConfiguration component, which provides
    * the Mux configuration for the direct asset upload.
    *
-   * @param uploadConfig
+   * @param settings The Mux new_asset_settings object to send to Sanity
    * @returns
    */
-  const startUpload = (uploadConfig: UploadConfig) => {
+  const startUpload = (settings: MuxNewAssetSettings) => {
     const {stagedUpload} = state
     if (!stagedUpload || uploadRef.current) return
     dispatch({action: 'commitUpload'})
@@ -162,14 +174,14 @@ export default function Uploader(props: Props) {
         uploadObservable = uploadUrl({
           client: props.client,
           url: stagedUpload.url,
-          uploadConfig,
+          settings,
         })
         break
       case 'file':
         uploadObservable = uploadFile({
           client: props.client,
           file: stagedUpload.files[0],
-          uploadConfig,
+          settings,
         }).pipe(
           takeUntil(
             cancelUploadButton.observable.pipe(
@@ -220,7 +232,10 @@ export default function Uploader(props: Props) {
 
   // Stages an upload from the file selector
   const handleUpload = (files: FileList | File[]) => {
-    dispatch({action: 'stageUpload', input: {type: 'file', files}})
+    dispatch({
+      action: 'stageUpload',
+      input: {type: 'file', files},
+    })
   }
 
   // Stages and validates an upload from pasting an asset URL
@@ -242,7 +257,10 @@ export default function Uploader(props: Props) {
     event.preventDefault()
     event.stopPropagation()
     extractDroppedFiles(event.nativeEvent.dataTransfer!).then((files) => {
-      dispatch({action: 'stageUpload', input: {type: 'file', files}})
+      dispatch({
+        action: 'stageUpload',
+        input: {type: 'file', files},
+      })
     })
   }
 
@@ -307,8 +325,8 @@ export default function Uploader(props: Props) {
   if (state.stagedUpload !== null) {
     return (
       <UploadConfiguration
+        stagedUpload={state.stagedUpload}
         pluginConfig={props.config}
-        schemaConfig={props.schemaType.options}
         secrets={props.secrets}
         startUpload={startUpload}
         onClose={() => dispatch({action: 'reset'})}
